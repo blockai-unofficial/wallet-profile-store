@@ -1,5 +1,5 @@
 {
-  "name": "my-two-bits",
+  "name": "my-two-bits-server",
   "version": "0.0.1",
   "description": "A tip-to-comment engine.",
   "main": "src/js/app.js",
