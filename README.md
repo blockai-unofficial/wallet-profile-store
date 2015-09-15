@@ -1,2 +1,2 @@
-# my-two-bits
-A tip-to-comment engine.
+# wallet-profile-store
+A bitcoin wallet profile store.

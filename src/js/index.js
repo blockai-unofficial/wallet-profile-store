@@ -7,7 +7,7 @@
 var AWS_ACCESS_KEY_ID =  process.env.AWS_ACCESS_KEY_ID;
 var AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 var NONCE_TABLE_NAME = process.env.NONCE_TABLE_NAME;
-var COMMENTS_TABLE_NAME = process.env.COMMENTS_TABLE_NAME;
+var PROFILES_TABLE_NAME = process.env.COMMENTS_TABLE_NAME;
 var PORT = process.env.PORT || 3434;
 var BLOCKCHAIN_NETWORK = process.env.BLOCKCHAIN_NETWORK;
 var BLOCKCYPHER_TOKEN = process.env.BLOCKCYPHER_TOKEN;
@@ -45,22 +45,33 @@ var commonWalletNonceStore = {
 
 /*
 
-  commentsStore
+  profilesStore
   -----------------
   dynamodb
 
 */
 
-ddb.createTable(COMMENTS_TABLE_NAME, { hash: ['sha1', ddb.schemaTypes().string] }, { read: 10, write: 10 }, function() {});
-var commentsStore = {
-  get: function(sha1, callback) {
-    ddb.getItem(COMMENTS_TABLE_NAME, address, null, {}, function(err, resp, cap) {
-      var comments = resp.comments;
-      callback(err, comments);
+ddb.createTable(PROFILES_TABLE_NAME, { hash: ['address', ddb.schemaTypes().string] }, { read: 10, write: 10 }, function() {});
+var profilesStore = {
+  get: function(address, callback) {
+    ddb.getItem(PROFILES_TABLE_NAME, address, null, {}, function(err, resp, cap) {
+      var profile = resp.profile;
+      callback(err, profile);
     });
   },
-  set: function(sha1, comments, callback) {
-    ddb.putItem(COMMENTS_TABLE_NAME, {sha1:sha1, comments:comments}, {}, function(err, resp, cap) {
+  getBatch: function(addresses, callback) {
+    var request = {};
+    request[PROFILES_TABLE_NAME] = { 
+      keys: addresses, 
+      attributesToGet: ['profile'] 
+    };
+    ddb.batchGetItem(request, function(err, resp, cap) {
+      var profiles = resp.items;
+      callback(err, profiles);
+    });
+  },
+  set: function(address, profile, callback) {
+    ddb.putItem(PROFILES_TABLE_NAME, {address:address, profile:profile}, {}, function(err, resp, cap) {
       callback(err, resp);
     });
   }
@@ -75,7 +86,7 @@ var commentsStore = {
 var app = require("./app")({
   commonBlockchain: commonBlockchain,
   commonWalletNonceStore: commonWalletNonceStore,
-  commentsStore: commentsStore
+  profilesStore: profilesStore
 });
 
 var server = app.listen(PORT, function() {

@@ -1,7 +1,7 @@
 var test = require("tape");
 var request = require('request');
 var env = require('node-env-file');
-env('./.env');
+env('./.env', { raise: false });
 
 var openpublishState = require('openpublish-state')({
   network: "testnet"
@@ -18,19 +18,27 @@ var commonWalletNonceStore = {
   }
 }
 
-var __comments = {};
-var commentsStore = {
-  get: function(sha1, callback) {
-    var comments = __comments[sha1] || [];
-    callback(false, comments);
+var __profiles = {};
+var profilesStore = {
+  get: function(address, callback) {
+    var profile = __profiles[address] || {};
+    callback(false, profile);
   },
-  set: function(sha1, comments, callback) {
-    __comments[sha1] = comments;
+  getBatch: function(addresses, callback) {
+    var profiles = [];
+    addresses.forEach(function(address) {
+      var profile = __profiles[address] || {};
+      profiles.push(profile);
+    });
+    callback(false, profiles);
+  },
+  set: function(address, profile, callback) {
+    __profiles[address] = profile;
     callback(false, true);
   }
 }
-var resetCommentsStore = function() {
-  __comments = {};
+var resetProfilesStore = function() {
+  __profiles = {};
 }
 
 var commonBlockchain = require('mem-common-blockchain');
@@ -38,27 +46,42 @@ var commonBlockchain = require('mem-common-blockchain');
 var app = require("../../src/js/app")({
   commonBlockchain: commonBlockchain,
   commonWalletNonceStore: commonWalletNonceStore,
-  commentsStore: commentsStore,
+  profilesStore: profilesStore,
   network: "testnet"
 });
-var port = 3434;
+var port = 3636;
 var serverRootUrl = "http://localhost:" + port;
 
 var testCommonWallet = require('test-common-wallet');
 
-var commonWallet = testCommonWallet({
+var aliceWallet = testCommonWallet({
   seed: "test",
   network: "testnet",
   commonBlockchain: commonBlockchain
 });
 
-test("should get comments for sha1 tipped by address", function(t) {
-  var sha1 = '2dd0b83677ac2271daab79782f0b9dcb4038d659';
+var bobWallet = testCommonWallet({
+  seed: "test1",
+  network: "testnet",
+  commonBlockchain: commonBlockchain
+});
+
+var walletProfileAlice = require("./wallet-profile")({
+  serverRootUrl: serverRootUrl,
+  commonWallet: aliceWallet
+});
+var walletProfileBob = require("./wallet-profile")({
+  serverRootUrl: serverRootUrl,
+  commonWallet: bobWallet
+});
+
+test("should get empty profiles for address", function(t) {
+  var address = aliceWallet.address;
   var server = app.listen(port, function() {
-    commonWallet.login(serverRootUrl, function(err, res, body) {
-      commonWallet.request({host: serverRootUrl, path: "/comments/" + sha1 }, function(err, res, body) {
-        t.equal(res.statusCode, 200, "200 statusCode");
-        t.equal(body, "[]", "returned empty comments");
+    aliceWallet.login(serverRootUrl, function(err, res, body) {
+      aliceWallet.request({host: serverRootUrl, path: "/profile/" + address }, function(err, res, body) {
+        t.equal(res.statusCode, 200, "GET /profile/" + address + ": 200 statusCode");
+        t.equal(body, "{}", "returned empty profile");
         server.close();
         t.end();
       });
@@ -66,35 +89,31 @@ test("should get comments for sha1 tipped by address", function(t) {
   });
 });
 
-test("should not get comments for sha1 not tipped by address", function(t) {
-  var sha1 = 'xxx';
-  var server = app.listen(port, function() {
-    commonWallet.login(serverRootUrl, function(err, res, body) {
-      commonWallet.request({host: serverRootUrl, path: "/comments/" + sha1 }, function(err, res, body) {
-        t.equal(res.statusCode, 401, "401 statusCode");
-        t.notEqual(body, "[]", "returned error message");
-        server.close();
-        t.end();
-      });
-    })
-  });
-});
-
-test("should post a new comment for sha1 tipped by address", function(t) {
-  var sha1 = '2dd0b83677ac2271daab79782f0b9dcb4038d659';
-  var commentBody = "test123";
-  commonWallet.signMessage(commentBody, function(err, signedCommentBody) {
+test("should post a new profile for address", function(t) {
+  var address = aliceWallet.address;
+  var profile = {
+    name: "Alice",
+    avatarUrl: "https://alice.com/avatar.jpg"
+  }
+  var profileJSON = JSON.stringify(profile);
+  aliceWallet.signMessage(profileJSON, function(err, signedProfileJSON) {
     var server = app.listen(port, function() {
-      commonWallet.login(serverRootUrl, function(err, res, body) {
-        commonWallet.request({host: serverRootUrl, path: "/comments/" + sha1, method:"POST", form: {"commentBody": commentBody, "signedCommentBody": signedCommentBody} }, function(err, res, body) {
-          t.equal(res.statusCode, 200, "200 statusCode");
-          t.equal(body, "ok", "should be ok");
-          commentsStore.get(sha1, function(err, comments) {
-            t.equal(comments[0].commentBody, commentBody, "updated store with proper commentBody");
-            t.equal(comments[0].address, commonWallet.address, "updated store with proper address");
-            resetCommentsStore();
-            server.close();
-            t.end();
+      aliceWallet.login(serverRootUrl, function(err, res, body) {
+        aliceWallet.request({host: serverRootUrl, path: "/profile/" + address, method:"POST", form: {"profileJSON": profileJSON, "signedProfileJSON": signedProfileJSON} }, function(err, res, body) {
+          t.equal(res.statusCode, 200, "POST /profile/" + address + ": 200 statusCode");
+          t.equal(body, "ok", "response as expected: ok");
+          aliceWallet.request({host: serverRootUrl, path: "/profile/" + address }, function(err, res, body) {
+            t.equal(res.statusCode, 200, "GET /profile/" + address + ": 200 statusCode");
+            var _profile = JSON.parse(body);
+            t.equal(_profile.name, profile.name, "returned matching profile name");
+            t.equal(_profile.avatarUrl, profile.avatarUrl, "returned matching profile avatarUrl");
+            profilesStore.get(address, function(err, _profile) {
+              t.equal(_profile.name, profile.name, "updated store with proper profile name");
+              t.equal(_profile.avatarUrl, profile.avatarUrl, "updated store with proper profile avatarUrl");
+              resetProfilesStore();
+              server.close();
+              t.end();
+            });
           });
         });
       });
@@ -102,18 +121,22 @@ test("should post a new comment for sha1 tipped by address", function(t) {
   });
 });
 
-test("should not post a new comment without a signature for sha1 tipped by address", function(t) {
-  var sha1 = '2dd0b83677ac2271daab79782f0b9dcb4038d659';
-  var commentBody = "test123";
-  var signedCommentBody = "bunk";
+test("should not post a new profile without a signature by address", function(t) {
+  var address = aliceWallet.address;
+  var profile = {
+    name: "Alice",
+    avatarUrl: "https://alice.com/avatar.jpg"
+  }
+  var profileJSON = JSON.stringify(profile);
+  var signedProfileJSON = "bunk";
   var server = app.listen(port, function() {
-    commonWallet.login(serverRootUrl, function(err, res, body) {
-      commonWallet.request({host: serverRootUrl, path: "/comments/" + sha1, method:"POST", form: {"commentBody": commentBody, "signedCommentBody": signedCommentBody} }, function(err, res, body) {
-        t.equal(res.statusCode, 401, "401 statusCode");
-        t.notEqual(body, "ok", "should not be ok");
-        commentsStore.get(sha1, function(err, comments) {
-          t.equal(comments.length, 0, "did not update store");
-          resetCommentsStore();
+    aliceWallet.login(serverRootUrl, function(err, res, body) {
+      aliceWallet.request({host: serverRootUrl, path: "/profile/" + address, method:"POST", form: {"profileJSON": profileJSON, "signedProfileJSON": signedProfileJSON} }, function(err, res, body) {
+        t.equal(res.statusCode, 401, "POST /profile/" + address + ": 401 statusCode");
+        t.notEqual(body, "ok", "response as expected: anything but 'ok'");
+        profilesStore.get(address, function(err, _profile) {
+          t.notEqual(JSON.stringify(_profile), profile, "did not update store");
+          resetProfilesStore();
           server.close();
           t.end();
         });
@@ -122,26 +145,23 @@ test("should not post a new comment without a signature for sha1 tipped by addre
   });
 });
 
-test("should post a new comment for sha1 tipped by address and get a list of comments", function(t) {
-  var sha1 = '2dd0b83677ac2271daab79782f0b9dcb4038d659';
-  var commentBody = "test123";
-  commonWallet.signMessage(commentBody, function(err, signedCommentBody) {
-    var server = app.listen(port, function() {
-      commonWallet.login(serverRootUrl, function(err, res, body) {
-        commonWallet.request({host: serverRootUrl, path: "/comments/" + sha1, method:"POST", form: {"commentBody": commentBody, "signedCommentBody":signedCommentBody} }, function(err, res, body) {
-          t.equal(res.statusCode, 200, "200 statusCode");
-          t.equal(body, "ok", "should be ok");
-          commonWallet.request({host: serverRootUrl, path: "/comments/" + sha1 }, function(err, res, body) {
-            t.equal(res.statusCode, 200, "200 statusCode");
-            var comments = JSON.parse(body);
-            t.equal(comments[0].commentBody, commentBody, "returned comments with proper commentBody");
-            t.equal(comments[0].address, commonWallet.address, "returned comments with proper address");
-            resetCommentsStore();
-            server.close();
-            t.end();
-          });
+test("should batch get profiles by a list of comma seperated addresses", function(t) {
+  var aliceProfile = { name: "Alice" };
+  var bobProfile = { name: "Bob" };
+  var addresses = [aliceWallet.address, bobWallet.address].join(",");
+  var server = app.listen(port, function() {
+    walletProfileAlice.post(aliceProfile, function(err, receipt) {
+      walletProfileBob.post(bobProfile, function(err, receipt) {
+        aliceWallet.request({host: serverRootUrl, path: "/profiles/" + addresses }, function(err, res, body) {
+          t.equal(res.statusCode, 200, "GET /profiles/" + addresses + ": 200 statusCode");
+          var profiles = JSON.parse(body);
+          t.equal(profiles[0].name, aliceProfile.name, "should be aliceProfile");
+          t.equal(profiles[1].name, bobProfile.name, "should be bobProfile");
+          resetProfilesStore();
+          server.close();
+          t.end();
         });
-      })
+      });
     });
   });
 });

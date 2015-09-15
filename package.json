@@ -1,7 +1,7 @@
 {
-  "name": "my-two-bits-server",
-  "version": "0.0.1",
-  "description": "A tip-to-comment engine.",
+  "name": "wallet-profile-store",
+  "version": "1.0.0",
+  "description": "A bitcoin wallet profile store.",
   "main": "src/js/app.js",
   "directories": {
     "test": "test"
@@ -16,7 +16,7 @@
     "express-common-wallet": "^0.0.2",
     "mem-common-blockchain": "^0.0.2",
     "node-env-file": "^0.1.7",
-    "openpublish-state": "^0.0.8",
+    "openpublish-state": "^0.1.0",
     "request": "^2.61.0",
     "secure-random": "^1.1.1",
     "shasum": "^1.0.1",
@@ -29,22 +29,21 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/blockai/my-two-bits.git"
+    "url": "git+https://github.com/blockai/wallet-profile-store.git"
   },
   "keywords": [
     "bitcoin",
     "blockai",
     "common-wallet",
-    "common-blockchain",
-    "openpublish",
     "wallet",
     "blockchain",
-    "comments"
+    "profile",
+    "avatar",
+    "name"
   ],
   "author": "William Cotton",
-  "license": "GPL-2.0",
   "bugs": {
-    "url": "https://github.com/blockai/my-two-bits/issues"
+    "url": "https://github.com/blockai/wallet-profile-store/issues"
   },
-  "homepage": "https://github.com/blockai/my-two-bits#readme"
+  "homepage": "https://github.com/blockai/wallet-profile-store#readme"
 }
